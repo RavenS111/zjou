@@ -227,50 +227,65 @@ elif page == "🧪 质量深度分析":
                 st.success(f"📑 选定个体全量数据：{target['ID']}")
                 st.table(pd.DataFrame([target]))
 
-# --- 页面 3: 沿海地图 (高德强制修复版) ---
+# --- 页面 3: 沿海地图 (修复切换按钮版) ---
 elif page == "⚓ 沿海捕捞地图":
     st.title("⚓ 舟山捕捞点位分布图")
-    df_m = df[df['Date'] == selected_date]
     
+    # --- 新增：Streamlit 原生控制开关，更稳妥 ---
+    map_style = st.radio("地图视图选择", ["标准地图", "卫星影像"], horizontal=True)
+    
+    df_m = df[df['Date'] == selected_date]
     if df_m.empty:
         st.warning("该日期无坐标数据")
     else:
-        # 1. 创建底图，必须设置 tiles=None
+        # 1. 创建底图
         m = folium.Map(
             location=[29.98, 122.25], 
             zoom_start=10,
-            tiles=None  # 关键：先不加载默认底图
+            tiles=None,
+            control_scale=True # 显示比例尺
         )
 
-        # 2. 显式添加高德地图瓦片层
-        # 这里使用高德的另一个常用稳定接口
-        amap_url = 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+        # 2. 根据 Streamlit 的选择设置底图地址
+        if map_style == "标准地图":
+            tiles_url = 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+            tiles_name = '高德标准图'
+        else:
+            tiles_url = 'https://webst02.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'
+            tiles_name = '高德卫星图'
+
+        # 添加选定的图层
         folium.TileLayer(
-            tiles=amap_url,
-            attr='&copy; <a href=" ">Amap</a >',
-            name='高德地图',
+            tiles=tiles_url,
+            attr='&copy; Amap',
+            name=tiles_name,
             overlay=False,
-            control=True
+            control=False # 因为上方已经用了 st.radio 切换，这里设为 False 避免冲突
         ).add_to(m)
 
         # 3. 添加热力图和点位
-        HeatMap([[r.Latitude, r.Longitude] for r in df_m.itertuples()]).add_to(m)
+        HeatMap([[r.Latitude, r.Longitude] for r in df_m.itertuples()], radius=15, blur=10).add_to(m)
+        
         for r in df_m.itertuples():
+            # 根据品质设置颜色，增强视觉效果
+            p_color = 'gold' if r.Quality == "💎 极品" else ('blue' if r.Is_Dead == "否" else 'red')
             folium.CircleMarker(
-                [r.Latitude, r.Longitude], radius=5,
-                popup=f"{r.ID}: {r.Quality}",
-                color='red' if r.Is_Dead == "是" else 'blue', 
-                fill=True
+                [r.Latitude, r.Longitude], 
+                radius=6,
+                popup=f"ID: {r.ID}<br>品质: {r.Quality}<br>地点: {r.Fishery}",
+                color=p_color, 
+                fill=True,
+                fill_opacity=0.8
             ).add_to(m)
 
-        # 4. 渲染并确保写入临时文件
-        # 为了防止缓存，我们可以给文件名加个后缀
+        # 4. 渲染
         temp_file = f"map_{datetime.now().strftime('%H%M%S')}.html"
         m.save(temp_file)
         with open(temp_file, "r", encoding='utf-8') as f:
             html_data = f.read()
         
-        components.html(html_data, height=600, scrolling=True)
+        # 适当增加 height 确保手机端显示完整
+        components.html(html_data, height=650, scrolling=False)
 # --- 新页面 4: 预测与分析 (数字孪生风格) ---
 elif page == "🔮 预测与分析":
     st.title("🔮 捕捞预测与产量分析 (数字孪生)")
@@ -406,3 +421,4 @@ elif page == "📝 数据库管理" :
     st.title("📝 核心数据库")
 
     st.data_editor(df, use_container_width=True, hide_index=True)
+
