@@ -3,5 +3,5 @@ pandas
 numpy
 plotly
 folium
-streamilt-folium
+streamlit-folium
 scikit-learm
